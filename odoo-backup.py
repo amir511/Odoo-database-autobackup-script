@@ -20,7 +20,6 @@ Usage
 * You have to simply specify the following variables in the script top:
     * REPO_PATH
     * BACKUP_FREQUENCY
-    * SUDO_PASSWORD (if needed)
 * Copy your configured script to your server, preferably to : 
     
     `/opt/odoo-autobackup/`
@@ -32,36 +31,61 @@ Usage
 # Change these constants so that they will suit your conditions
 REPO_PATH = "" # Absolute path to the directory of the git repo that will hold the regular backups
 BACKUP_FREQUENCY = 3600 # Number of seconds afterwhich the script will run again (1 hour = 3600 seconds)
-SUDO_PASSWORD = '' # This is the password that will be used to change to the database user via 'sudo su postgres',
-                   # leave it blank if there is no password, or if you want to connect via postgres password i.e. 'su postgres'
-# other configurations that might also be needed depending on your system configuration:
-DB_USER = 'postgres' # this is the default database username, usually you don't need to change this, change it only if your postgresql was installed on a different user,
-                     # This is not to be confused with the odoo user that has a role in the db
-DB_USER_PASSWORD = ''   # password of the postgres user, only specify if the postgres has a password already, if not specified, the script will automatically 
-                        # change user via 'sudo'
 
 # imports
 import os
 from time import sleep
 from datetime import datetime
 
-def change_directory(dir):
-    pass
-
-def change_user():
-    pass
+def sys_command(cmd):
+	for i in os.popen(cmd):
+		print(i)
 
 def get_all_databases():
-    pass
+	generator = os.popen("psql --tuples-only -c '\l' | awk -F\| '{ print $1 }' | grep -E -v '(template0|template1|^$)'")
+	all_dbs = []
+	for i in generator:
+		i = i.strip()
+		if i != "":
+			all_dbs.append(i)
+	return all_dbs
 
-def dump_databases():
-    pass
+def dump_databases(dbs):
+	for db in dbs:
+		filename = db+"_"+datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+		"""
+		Depending on the version of postgresql and your Odoo installation
+		backups may not work properly after restore when dumping them with the below command
+		So I wrote down another two commands which gives alternative results (commented out)
+		Please before using this script in production make sure that this script will give you the appropriate results
+		"""
+		sys_command("nice -n 19 pg_dump -Fp -h '/var/run/postgresql' -U 'postgres' '{db}' --file={f}".format(db=db,f=filename))
+#		sys_command("nice -n 19 pg_dump --format=c --no-owner --username='postgres' --host='/var/run/postgresql' --port=5432 --dbname={db} | gzip > {f}+]'.zip'".format(db=db,f=filename))
+#		sys_command("nice -n 19 pg_dump -E UTF-8 --blobs --format=c --dbname={db} | gzip>{f}+'.zip'".format(db=db,f=filename))
 
 def remove_old_backups():
-    pass
+	all_files = os.listdir()
+	for obj in all_files:
+		if os.path.isfile(obj):
+			os.remove(obj)
 
-def commit_and_push():
-    pass
+def add_commit_push(msg):
+	sys_command('git pull --force origin master')
+	sys_command('git add --all')
+	sys_command("git commit -m'{}'".format(msg))
+	sys_command('git push')
 
+def main():
+	while True:
+		dbs = get_all_databases()
+		os.chdir(REPO_PATH)
+		remove_old_backups()
+		add_commit_push('Automatic deletion of old database backups')
+		dump_databases(dbs)
+		add_commit_push('Automatic new database backups')
+		sleep(BACKUP_FREQUENCY)
+
+if __name__ == '__main__':
+    main()
 
 
