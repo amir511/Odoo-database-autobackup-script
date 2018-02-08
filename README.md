@@ -13,7 +13,6 @@ This Python script performs automatic backups for your odoo instance database an
 * You have to simply specify the following variables in the script top:
     * REPO_PATH
     * BACKUP_FREQUENCY
-    * SUDO_PASSWORD (if needed)
 * Copy your configured script to your server, preferably to : 
     
     `/opt/odoo-autobackup/`
